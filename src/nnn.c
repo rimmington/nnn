@@ -357,14 +357,15 @@ static const char * const messages[] = {
 #define NNN_SCRIPT 5
 #define NNN_NOTE 6
 #define NNN_TMPFILE 7
-#define NNNLVL 8 /* strings end here */
-#define NNN_USE_EDITOR 9 /* flags begin here */
-#define NNN_NO_AUTOSELECT 10
-#define NNN_RESTRICT_NAV_OPEN 11
-#define NNN_RESTRICT_0B 12
-#define NNN_TRASH 13
+#define NNN_CDFILE 8
+#define NNNLVL 9 /* strings end here */
+#define NNN_USE_EDITOR 10 /* flags begin here */
+#define NNN_NO_AUTOSELECT 11
+#define NNN_RESTRICT_NAV_OPEN 12
+#define NNN_RESTRICT_0B 13
+#define NNN_TRASH 14
 #ifdef __linux__
-#define NNN_OPS_PROG 14
+#define NNN_OPS_PROG 15
 #endif
 
 static const char * const env_cfg[] = {
@@ -376,6 +377,7 @@ static const char * const env_cfg[] = {
 	"NNN_SCRIPT",
 	"NNN_NOTE",
 	"NNN_TMPFILE",
+	"NNN_CDFILE",
 	"NNNLVL",
 	"NNN_USE_EDITOR",
 	"NNN_NO_AUTOSELECT",
@@ -2850,6 +2852,7 @@ static void browse(char *ipath)
 	char *path, *lastdir, *lastname;
 	char *dir, *tmp;
 	char *scriptpath = getenv(env_cfg[NNN_SCRIPT]);
+	FILE *fp;
 
 	atexit(dentfree);
 
@@ -3021,6 +3024,39 @@ nochange:
 					rundir[0] = '\0';
 					cfg.runscript = 0;
 					setdirwatch();
+
+					/* Navigate to the path specified by the script, if possible */
+					tmp = getenv(env_cfg[NNN_CDFILE]);
+					if (!tmp || !(fp = fopen(tmp, "r"))) {
+						goto begin;
+					}
+					char* getres = fgets(newpath, PATH_MAX, fp);
+					fclose(fp);
+					unlink(tmp);
+					if (!getres || stat(newpath, &sb) == -1) {
+						printwarn();
+						goto begin;
+					}
+					DPRINTF_S(newpath);
+					if ((sb.st_mode & S_IFMT) == S_IFDIR) {
+						if (access(newpath, R_OK) == -1) {
+							printwarn();
+							goto begin;
+						}
+						dir = newpath;
+						lastname[0] = '\0';
+					} else {
+						dir = xdirname(newpath);
+						if (!xdiraccess(dir)) {
+							printwarn();
+							goto begin;
+						}
+						xstrlcpy(lastname, xbasename(newpath), NAME_MAX + 1);
+					}
+
+					/* Save last working directory */
+					xstrlcpy(lastdir, path, PATH_MAX);
+					xstrlcpy(path, dir, PATH_MAX);
 					goto begin;
 				}
 
